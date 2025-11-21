@@ -101,6 +101,15 @@ class _BleHomePageState extends State<BleHomePage> {
               _connectedDeviceName = null;
               // 重新清空设备列表，准备再次扫描
               _devices.clear();
+
+              // 立即发起一次扫描，让用户看到设备列表恢复
+              // 💡 异步调用 startScan，避免阻塞 setState 所在的同步代码块
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+// 必须检查 mounted，避免在 widget 被销毁后调用 setState
+                if (mounted) {
+                  startScan();
+                }
+              });
             }
           });
         }
