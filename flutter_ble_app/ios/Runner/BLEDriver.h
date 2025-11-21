@@ -40,6 +40,9 @@ typedef NS_ENUM(NSInteger,DeviceType) {
 // 【新增/重要】连接成功的设备 (在 centralManager:didConnectPeripheral: 中设置)
 @property (nonatomic, strong) CBPeripheral *connectedPeripheral;
 
+// 【新增】用于存储发现的 CBPeripheral 实例 (键: 设备名, 值: CBPeripheral)
+@property (nonatomic, strong) NSMutableDictionary<NSString *, CBPeripheral *> *discoveredPeripherals;
+
 // 3. 添加 delegate 属性 (必须是 weak，防止循环引用)
 @property (nonatomic, weak, nullable) id<BLEDriverDelegate> delegate;
 

@@ -32,6 +32,7 @@
                 // 初始化蓝牙中心管理对象
                 // queue: nil 代表在主线程回调，实际开发建议放后台线程
                 _centralManager = [[CBCentralManager alloc] initWithDelegate:self queue:nil];
+        _discoveredPeripherals = [[NSMutableDictionary alloc] init];
     }
     return self;
 }
@@ -116,9 +117,21 @@
     }
     
     // 通知 Swift 层服务发现已完成，可以进行通信了 (保持不变)
-    if (self.delegate && [self.delegate respondsToSelector:@selector(didDiscoverServicesForDevice:)]) {
-        [self.delegate didDiscoverServicesForDevice:peripheral.name];
-    }
+//    if (self.delegate && [self.delegate respondsToSelector:@selector(didDiscoverServicesForDevice:)]) {
+//        [self.delegate didDiscoverServicesForDevice:peripheral.name];
+//    }
+    
+    // 🚨 更好的做法：只在 `didDiscoverServices` 中进行特征发现，然后等待所有特征发现的回调完成。
+        // 但是，由于你的 ViewModel 是在 `didDiscoverServicesForDevice` 收到通知后才认为连接完成，我们
+        // 暂且保留你在 `didDiscoverCharacteristicsForService` 里面的通知代码：
+        
+        if ([service.UUID.UUIDString isEqualToString:@"你的主要服务UUID"]) { // 假设你主要关注某个服务
+             if (self.delegate && [self.delegate respondsToSelector:@selector(didDiscoverServicesForDevice:)]) {
+                 [self.delegate didDiscoverServicesForDevice:peripheral.name];
+             }
+        }
+        
+        // 如果你没有主要服务 UUID，并且想尽快完成流程，可以暂时放在这里。
 }
 
 // 【新增】读取到特征值后的回调
@@ -150,25 +163,31 @@
 }
 
 // 【新增】连接实现
+// 【修复：使用真正的 CoreBluetooth 连接】
+// ios/Runner/BLEDriver.m
+
 - (void)connectToDeviceWithName:(NSString *)deviceName {
     NSLog(@"[OC底层驱动] 尝试连接设备: %@", deviceName);
     
-    // ⚠️ 实际应用中，你需要先找到对应的 CBPeripheral 实例，这里简化为打印
-    
-    // 假设我们找到了设备，并开始连接：
-    // [self.centralManager connectPeripheral:self.connectingPeripheral options:nil];
-    
     [self stopScan];
     
-    // 模拟 1.5 秒连接耗时，然后假装连接成功
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    // 【修复】从字典中查找对应的 CBPeripheral 实例
+    CBPeripheral *targetPeripheral = [self.discoveredPeripherals objectForKey:deviceName];
+    
+    if (targetPeripheral) {
+        // 3. 调用 CoreBluetooth 方法连接
+        [self.centralManager connectPeripheral:targetPeripheral options:nil];
         
-        // 核心逻辑：通知连接成功
-        if (self.delegate && [self.delegate respondsToSelector:@selector(didConnectToDevice:)]) {
-            [self.delegate didConnectToDevice:deviceName];
-        }
-    });
+        // ⚠️ 可选：保存到 connectingPeripheral (如果你需要)
+        self.connectingPeripheral = targetPeripheral;
+        
+        NSLog(@"[OC底层] ⚡️ 发起实际的 CoreBluetooth 连接请求到: %@", deviceName);
+    } else {
+        NSLog(@"[OC底层] ❌ 连接失败：未找到名为 %@ 的 CBPeripheral 实例 (不在字典中)。", deviceName);
+        [self.delegate didDisconnectOrFailToConnect:deviceName];
+    }
 }
+
 - (void)sendCommand:(NSString *)hexCommand toDevice:(DeviceType)type {
     NSString *typeString = (type == DeviceTypeLight) ? @"补光灯" : @"云台";
     NSLog(@"[OC底层] 正在向 [%@] 发送指令: %@", typeString, hexCommand);
@@ -222,23 +241,44 @@
 
 #pragma mark - CBCentralManagerDelegate (连接状态处理)
 
-// 【新增/替换】连接成功的回调（现在我们将使用这个方法进行服务发现）
+// 【核心修复：服务发现成功或失败后的回调】
+// 这个方法是 CoreBluetooth 要求必须实现的，否则 API MISUSE 警告就会出现！
+- (void)peripheral:(CBPeripheral *)peripheral didDiscoverServices:(nullable NSError *)error {
+    if (error) {
+        NSLog(@"[OC底层] 🔴 发现服务失败: %@", error.localizedDescription);
+        // 通知 Swift 层连接失败或断开
+        [self.delegate didDisconnectOrFailToConnect:peripheral.name];
+        return;
+    }
+    
+    // 成功发现服务
+    NSLog(@"[OC底层] ✅ 发现 %lu 个服务。开始发现特征...", (unsigned long)peripheral.services.count);
+    
+    // 遍历服务，并发现特征
+    for (CBService *service in peripheral.services) {
+        // nil 代表发现当前服务中的所有特征
+        [peripheral discoverCharacteristics:nil forService:service];
+    }
+}
+
+
+// 【修复：连接成功的回调】
 - (void)centralManager:(CBCentralManager *)central didConnectPeripheral:(CBPeripheral *)peripheral {
     NSLog(@"[OC底层] 🟢 设备连接成功: %@", peripheral.name);
     
-    // 1. 【核心】设置连接成功的设备属性
-        self.connectedPeripheral = peripheral;
-        
-        // 2. 将 BLEDriver 设置为这个 peripheral 的代理，以便接收服务、特征等回调
-        peripheral.delegate = self;
-        
-        // 3. 开始发现服务：[peripheral discoverServices:nil];
-        // ⚠️ 实际步骤：我们稍后会添加服务发现逻辑，这里先通知连接成功
-        
-        // 4. 通知 Swift 层
-        if (self.delegate && [self.delegate respondsToSelector:@selector(didConnectToDevice:)]) {
-            [self.delegate didConnectToDevice:peripheral.name];
-        }
+    // 1. 设置连接成功的设备属性并设置代理
+    self.connectedPeripheral = peripheral;
+    peripheral.delegate = self;
+    
+    // 2. 【核心修复】发起服务发现：nil 代表发现所有服务
+    [peripheral discoverServices:nil];
+    NSLog(@"[OC底层] 🔍 开始发现设备的服务...");
+    
+    // 3. ⚠️ 移除过早通知 Swift 层的代码！ (等待服务发现完成再通知)
+    /* if (self.delegate && [self.delegate respondsToSelector:@selector(didConnectToDevice:)]) {
+         [self.delegate didConnectToDevice:peripheral.name];
+    }
+    */
 }
 
 // 【新增】连接失败的回调
@@ -279,7 +319,10 @@
         foundName = @"未知设备 (No Name)";
     }
     
-    // 2. 通过 Delegate 通知 Swift
+    // 【核心新增】保存 CBPeripheral 实例
+        [self.discoveredPeripherals setObject:peripheral forKey:foundName];
+    
+    //  通过 Delegate 通知 Swift
     if (self.delegate && [self.delegate respondsToSelector:@selector(didDiscoverDeviceWithName:rssi:)]) {
         [self.delegate didDiscoverDeviceWithName:foundName rssi:RSSI];
     }
