@@ -62,15 +62,34 @@ final class BluetoothViewModel: NSObject, ObservableObject {
             print("❌ [ViewModel] 错误：BLEDriver 实例尚未初始化。")
         }
     }
+    
+    // 修复 connectToDevice 签名，以匹配 Method Channel 转发和你的 Dart 端调用
+    func connectToDevice(name: String) {
+        print("[ViewModel] 接收到 View 指令：连接设备 \(name)")
+        self.connectionStatus = .connecting(name)
+        // ⚠️ 使用新的方法签名
+        self.driver?.connectDevice(name: name)
+    }
+
+    // 确保在 AppDelegate 中引用的方法签名是 connect(toDeviceName: name)
+    // 既然 AppDelegate 使用的是 connect(toDeviceName: name)，那么我们改回 ViewModel
     func connect(toDeviceName name: String) {
         print("[ViewModel] 接收到 View 指令：连接设备 \(name)")
-        
-        // 更新状态为 Connecting，并传入设备名
         self.connectionStatus = .connecting(name)
-        
         self.driver?.connectDevice(name: name)
     }
     
+    // 【新增】：添加断开连接方法 (对应 Dart 的 disconnectDevice)
+    // 【新增】断开连接的方法
+    func disconnectDevice(name: String) {
+        print("[ViewModel] 接收到 View 指令：断开设备 \(name)")
+        
+        // ⚠️ 调用 BLEDriver 中新添加的方法
+        self.driver?.disconnectDevice(name)
+        
+        // 状态更新将在 didDisconnectOrFail 回调中处理
+    }
+        
     // 假设 1 代表 ON (开灯), 0 代表 OFF (关灯)
     func toggleLight(isOn: Bool) {
         

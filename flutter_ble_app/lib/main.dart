@@ -5,9 +5,8 @@ import 'package:flutter/services.dart';
 
 // 定义与 iOS Swift 端约定好的 Channel 名称
 // 必须与 AppDelegate.swift 中的名称保持一致
-const platform = MethodChannel('com.zch.ble/commands');
-// 新增】Event Channel，名称必须与 Swift/OC 侧一致
-const bleEvents = EventChannel('com.zch.ble/events');
+const MethodChannel bleChannel = MethodChannel('com.example.flutter_ble/ble_control');
+const EventChannel bleEvents = EventChannel('com.example.flutter_ble/ble_events');
 
 void main() {
   runApp(const BleApp());
@@ -98,7 +97,7 @@ class _BleHomePageState extends State<BleHomePage> {
 
   Future<void> startScan() async {
     try {
-      await platform.invokeMethod('startScan');
+      await bleChannel.invokeMethod('startScan');
       setState(() {
         _statusMessage = '正在扫描...';
 
@@ -115,7 +114,7 @@ class _BleHomePageState extends State<BleHomePage> {
   Future<void> startScan2() async {
     try {
       // 通过 MethodChannel.invokeMethod 调用原生方法
-      await platform.invokeMethod('startScan');
+      await bleChannel.invokeMethod('startScan');
       setState(() {
         _statusMessage = '正在扫描...';
 
@@ -132,7 +131,7 @@ class _BleHomePageState extends State<BleHomePage> {
     });
     try {
       // 传递参数 Map {'name': name}
-      await platform.invokeMethod('connectDevice', {'name': name});
+      await bleChannel.invokeMethod('connectDevice', {'name': name});
     } on PlatformException catch (e) {
       setState(() {
         _statusMessage = "连接失败: ${e.message}";

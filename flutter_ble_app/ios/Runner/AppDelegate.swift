@@ -19,8 +19,9 @@ class AppDelegate: FlutterAppDelegate,FlutterStreamHandler {
         let controller : FlutterViewController = window?.rootViewController as! FlutterViewController
         
         // 设定唯一的 Channel 名称，Flutter 端必须使用相同名称
-        let bleMethodChannel = FlutterMethodChannel(name: "com.zch.ble/commands",
-                                                    binaryMessenger: controller.binaryMessenger)
+        let bleMethodChannel = FlutterMethodChannel(name: "com.example.flutter_ble/ble_control", // <--- 修改此处
+                                                     binaryMessenger: controller.binaryMessenger)
+    
         
         // 2. 处理 Flutter 发来的方法调用 (Method Call Handler)
         bleMethodChannel.setMethodCallHandler({
@@ -36,28 +37,36 @@ class AppDelegate: FlutterAppDelegate,FlutterStreamHandler {
             switch call.method {
             case "startScan":
                 self.viewModel.startScan()
-                // 成功返回 nil (空)
                 result(nil)
-                
-            case "connectDevice":
-                // 接收 Flutter 传入的参数 (Map)
+
+            case "connectToDevice": // 对应 Dart 的 connectToDevice
                 guard let args = call.arguments as? [String: Any],
                       let name = args["name"] as? String else {
                     result(FlutterError(code: "INVALID_ARG", message: "Missing device name", details: nil))
                     return
                 }
+                // ⚠️ 调用 ViewModel 中正确签名的方法
                 self.viewModel.connect(toDeviceName: name)
+                result(nil)
+
+            // 【新增】处理断开连接
+            case "disconnectDevice":
+                guard let args = call.arguments as? [String: Any],
+                      let name = args["name"] as? String else {
+                    result(FlutterError(code: "INVALID_ARG", message: "Missing device name", details: nil))
+                    return
+                }
+                self.viewModel.disconnectDevice(name: name)
                 result(nil)
                 
             default:
-                // 收到无法识别的方法调用
                 result(FlutterMethodNotImplemented)
             }
         })
         
         // 3. 设置 Flutter Event Channel (用于原生向 Flutter 发送数据流)
-        let bleEventChannel = FlutterEventChannel(name: "com.zch.ble/events",
-                                                  binaryMessenger: controller.binaryMessenger)
+        let bleEventChannel = FlutterEventChannel(name: "com.example.flutter_ble/ble_events", // <--- 修改此处
+                                                      binaryMessenger: controller.binaryMessenger)
 
         // ⚠️ 【新增】设置 AppDelegate 为 Event Channel 的代理
         bleEventChannel.setStreamHandler(self)

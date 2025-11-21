@@ -56,6 +56,7 @@
 }
 
 // 【新增实现】主动读取电量
+
 - (void)readBatteryLevel {
     if (!self.connectingPeripheral) {
         NSLog(@"[OC底层] ⚠️ 无法读取电量：设备未连接。");
@@ -71,6 +72,19 @@
     NSLog(@"[OC底层] 🔋 再次发起读取电量指令...");
 }
 
+// 【新增】断开连接的实现
+-(void)disconnectDevice:(NSString *)name {
+    // 假设 self.connectedPeripheral 是当前连接的 CBPeripheral 实例
+    // 并且 self.centralManager 是 CBCentralManager 实例
+    if (self.connectedPeripheral) {
+        NSLog(@"[BLEDriver] 正在取消连接到：%@", name);
+        [self.centralManager cancelPeripheralConnection:self.connectedPeripheral];
+    } else {
+        NSLog(@"[BLEDriver] 错误：没有设备连接可以断开。");
+        // 即使没有连接，也视为成功，最终状态由系统回调处理
+        [self.delegate didDisconnectOrFailToConnect:name];
+    }
+}
 - (void)peripheral:(CBPeripheral *)peripheral didDiscoverCharacteristicsForService:(CBService *)service error:(nullable NSError *)error {
     if (error) {
         NSLog(@"[OC底层] 🔴 发现特征失败: %@", error.localizedDescription);
@@ -212,14 +226,19 @@
 - (void)centralManager:(CBCentralManager *)central didConnectPeripheral:(CBPeripheral *)peripheral {
     NSLog(@"[OC底层] 🟢 设备连接成功: %@", peripheral.name);
     
-    // ⚠️ 实际步骤：
-    // 1. 将 peripheral 设置为 BLEDriver 的一个属性，以便后续操作
-    // 2. 开始发现服务：[peripheral discoverServices:nil];
-    
-    // 3. 通过 Delegate 通知 Swift 层
-    if (self.delegate && [self.delegate respondsToSelector:@selector(didConnectToDevice:)]) {
-        [self.delegate didConnectToDevice:peripheral.name];
-    }
+    // 1. 【核心】设置连接成功的设备属性
+        self.connectedPeripheral = peripheral;
+        
+        // 2. 将 BLEDriver 设置为这个 peripheral 的代理，以便接收服务、特征等回调
+        peripheral.delegate = self;
+        
+        // 3. 开始发现服务：[peripheral discoverServices:nil];
+        // ⚠️ 实际步骤：我们稍后会添加服务发现逻辑，这里先通知连接成功
+        
+        // 4. 通知 Swift 层
+        if (self.delegate && [self.delegate respondsToSelector:@selector(didConnectToDevice:)]) {
+            [self.delegate didConnectToDevice:peripheral.name];
+        }
 }
 
 // 【新增】连接失败的回调

@@ -36,8 +36,11 @@ typedef NS_ENUM(NSInteger,DeviceType) {
 
 // 增加一个属性，用于保存我们正在连接的设备实例
 @property (nonatomic, strong) CBPeripheral *connectingPeripheral;
-// 3. 添加 delegate 属性 (必须是 weak，防止循环引用)
 
+// 【新增/重要】连接成功的设备 (在 centralManager:didConnectPeripheral: 中设置)
+@property (nonatomic, strong) CBPeripheral *connectedPeripheral;
+
+// 3. 添加 delegate 属性 (必须是 weak，防止循环引用)
 @property (nonatomic, weak, nullable) id<BLEDriverDelegate> delegate;
 
 // 初始化方法
@@ -57,6 +60,9 @@ typedef NS_ENUM(NSInteger,DeviceType) {
 
 // 【新增】主动读取电量特征值
 - (void)readBatteryLevel;
+
+// 【新增】断开连接的方法
+-(void)disconnectDevice:(NSString *)name;
 
 // 【新增】写入数据到特定的特征
 // characteristicUUIDString: 目标特征的 UUID
