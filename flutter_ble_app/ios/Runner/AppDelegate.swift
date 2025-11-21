@@ -39,7 +39,7 @@ class AppDelegate: FlutterAppDelegate,FlutterStreamHandler {
                 self.viewModel.startScan()
                 result(nil)
 
-            case "connectToDevice": // 对应 Dart 的 connectToDevice
+            case "connectDevice": // 对应 Dart 的 connectToDevice
                 guard let args = call.arguments as? [String: Any],
                       let name = args["name"] as? String else {
                     result(FlutterError(code: "INVALID_ARG", message: "Missing device name", details: nil))
