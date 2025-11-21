@@ -191,6 +191,42 @@ class _BleHomePageState extends State<BleHomePage> {
     }
   }
 
+  // 4. 【新增】调用原生方法读取电量
+  Future<void> readBatteryLevel() async {
+    setState(() {
+      _statusMessage = '正在读取电量...';
+    });
+    try {
+      // ⚠️ Method Channel 方法名需要与 Native 端约定
+      await bleChannel.invokeMethod('readBatteryLevel');
+      // Native 会通过 Event Channel 或 UIHelper 返回结果
+    } on PlatformException catch (e) {
+      setState(() {
+        _statusMessage = "读取电量失败: ${e.message}";
+      });
+    }
+  }
+
+  // 5. 【新增】调用原生方法发送控制指令
+  Future<void> sendControlCommand() async {
+    setState(() {
+      _statusMessage = '正在发送开灯指令...';
+    });
+    try {
+      // ⚠️ Method Channel 方法名需要与 Native 端约定
+      // 假设我们发送一个简单的 Hex 命令，例如：01 (开)
+      await bleChannel.invokeMethod('sendCommand', {
+        'command': '01',
+        'type': 1 // 假设 1 代表 Light Device Type
+      });
+      // Native 会通过 Event Channel 或 UIHelper 返回结果
+    } on PlatformException catch (e) {
+      setState(() {
+        _statusMessage = "发送指令失败: ${e.message}";
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -247,21 +283,39 @@ class _BleHomePageState extends State<BleHomePage> {
 // 连接成功后的视图 (示例，你需要根据你的需求完善)
 // lib/main.dart (在 _BleHomePageState 内部的 _buildConnectedView)
 
+// lib/main.dart (在 _BleHomePageState 内部的 _buildConnectedView)
+
   Widget _buildConnectedView() {
-    // ...
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // ...
+          Text("已连接到: ${_connectedDeviceName ?? '未知设备'}", style: const TextStyle(fontSize: 20)),
+          const SizedBox(height: 20),
+
+          // 1. 【新增】读取电量按钮
+          ElevatedButton.icon(
+            onPressed: readBatteryLevel, // 绑定新的方法
+            icon: const Icon(Icons.battery_full),
+            label: const Text("读取电量"),
+          ),
+          const SizedBox(height: 10),
+
+          // 2. 【新增】发送指令按钮
+          ElevatedButton.icon(
+            onPressed: sendControlCommand, // 绑定新的方法
+            icon: const Icon(Icons.lightbulb_outline),
+            label: const Text("发送控制指令 (开灯)"),
+          ),
+          const SizedBox(height: 20),
+
+          // 3. 断开连接按钮 (保持不变)
           ElevatedButton(
-            // 按钮只有在未处于 "断开连接中" 状态时才启用
             onPressed: _statusMessage.startsWith('断开连接中:')
-                ? null // 如果正在断开中，则禁用按钮
+                ? null
                 : () => disconnectDevice(_connectedDeviceName ?? ''),
             child: const Text("断开连接"),
           ),
-          // ...
         ],
       ),
     );

@@ -103,6 +103,24 @@ final class BluetoothViewModel: NSObject, ObservableObject {
         
         print("[ViewModel] 💡 发起控制指令：\(isOn ? "开灯" : "关灯")")
     }
+    
+    // 读取电量方法，转发给 BLEDriver
+    func readBatteryLevel() {
+        print("[ViewModel] 接收到 View 指令：读取电量")
+        // 修复 1：使用可选链 (?) 安全调用
+        self.driver?.readBatteryLevel()
+    }
+
+    // ⚠️ 【修复后】
+    // 发送指令方法，转发给 BLEDriver
+    // 发送指令方法，转发给 BLEDriver
+    func sendCommand(command: String, type: Int) {
+        print("[ViewModel] 接收到 View 指令：发送指令 \(command), type: \(type)")
+        
+        // ⚠️ 【核心修复】：必须使用完整的参数标签，包括第一个参数的 "command:"
+        // 这样才能匹配你在 BLEDriver.h 中用 swift_name 指定的 "sendCommand(command:withType:)" 签名
+        self.driver?.sendCommand(command: command, withType: type)
+    }
 }
 
 
@@ -160,4 +178,6 @@ extension BluetoothViewModel: BLEDriverDelegate {
             "status": "connected_ready" // 自定义状态码
         ])
     }
+    
+  
 }

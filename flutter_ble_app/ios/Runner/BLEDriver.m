@@ -6,6 +6,33 @@
 //
 
 #import "BLEDriver.h"
+
+// ios/Runner/BLEDriver.m (在顶部)
+
+#import <CoreBluetooth/CoreBluetooth.h> // 确保导入 CoreBluetooth
+
+// ⚠️ 修正：确保 UUID 字符串是完整的 32 个 Hex 字符 + 4 个连字符！
+
+// 正确的服务 UUID (从你的连接日志中提取)
+NSString *CUSTOM_SERVICE_UUID = @"65786365-6C70-6F69-6E74-2E636F6D0001";
+
+// 正确的写入特征 UUID (属性 8)
+NSString *WRITE_CHAR_UUID = @"65786365-6C70-6F69-6E74-2E636F6D0002";
+
+// 属性为 10 (Read) 的特征 UUID
+NSString *READ_CHAR_UUID = @"0000BCA5-D102-11E1-9B23-00025B00A5A5";
+// ⚠️ 【新增】私有扩展：声明仅供 BLEDriver.m 内部使用的方法
+@interface BLEDriver ()
+
+- (nullable CBCharacteristic *)findCharacteristic:(NSString *)characteristicUUIDString
+                                       withService:(NSString *)serviceUUIDString;
+
+- (NSData *)dataFromHexString:(NSString *)hexString;
+
+@end
+// ⚠️ 记得要在 @implementation BLEDriver ... 内部实现这些方法！
+
+// ... 之后才是 @implementation BLEDriver
 /**
  “千万不能在 .h 头文件里 import -Swift.h！ 这会造成循环引用（Circular Dependency）。
  因为 Bridge-Header 让 Swift 引用了 OC 的 .h。
@@ -59,20 +86,35 @@
 // 【新增实现】主动读取电量
 
 - (void)readBatteryLevel {
-    if (!self.connectingPeripheral) {
-        NSLog(@"[OC底层] ⚠️ 无法读取电量：设备未连接。");
-        return;
-    }
-    if (!self.batteryLevelCharacteristic) {
-        NSLog(@"[OC底层] ⚠️ 无法读取电量：未发现电量特征。");
+    if (!self.connectedPeripheral) {
+        NSLog(@"[OC底层] 🔴 无法读取电量：未连接设备。");
+        // 可以在这里通过 delegate/event sink 通知 Flutter 失败
         return;
     }
     
-    // 核心：调用 CoreBluetooth 方法进行读取
-    [self.connectingPeripheral readValueForCharacteristic:self.batteryLevelCharacteristic];
-    NSLog(@"[OC底层] 🔋 再次发起读取电量指令...");
+    // ⚠️ 【修复 UUID 拼写】使用正确的自定义服务 UUID
+        NSString *SERVICE_UUID = @"65786365-6C70-6F69-6E74-2E636F6D0001";
+        
+        // ⚠️ 【临时测试】使用日志中发现的支持 Read 属性的特征 (0000BCA5...)
+        // 我们仍然假设它属于 CUSTOM_SERVICE_UUID，如果失败，你需要手动确定它属于哪个服务
+        NSString *READ_CHAR_UUID = @"0000BCA5-D102-11E1-9B23-00025B00A5A5";
+        
+        CBCharacteristic *readChar = [self findCharacteristic:READ_CHAR_UUID
+                                                 withService:SERVICE_UUID];
+    
+    // 假设你有一个查找特征的辅助方法
+    // ⚠️ 请替换为你实际的 UUID
+    CBCharacteristic *batteryLevelChar = [self findCharacteristic:@"0000BCA8-D102-11E1-9B23-00025B00A5A5" withService:@"180F"];
+    
+    if (batteryLevelChar) {
+        NSLog(@"[OC底层] 🔋 正在读取电量特征值: %@", batteryLevelChar.UUID.UUIDString);
+        // 执行读取操作
+        [self.connectedPeripheral readValueForCharacteristic:batteryLevelChar];
+    } else {
+        NSLog(@"[OC底层] 🔴 无法找到电量特征或服务。");
+        // 可以在这里通过 delegate/event sink 通知 Flutter 失败
+    }
 }
-
 // 【新增】断开连接的实现
 -(void)disconnectDevice:(NSString *)name {
     // 假设 self.connectedPeripheral 是当前连接的 CBPeripheral 实例
@@ -98,9 +140,9 @@
         NSLog(@"[OC底层] 特征 UUID: %@, 属性: %lu", characteristic.UUID.UUIDString, (unsigned long)characteristic.properties);
         
         // 2. 识别电量特征 UUID (2A19)
-        if ([characteristic.UUID.UUIDString isEqualToString:@"2A19"]) {
+        if ([characteristic.UUID.UUIDString isEqualToString:@"0000BCA8-D102-11E1-9B23-00025B00A5A5"]) {
             
-            NSLog(@"[OC底层] ✅ 发现电量特征 (2A19)!");
+            NSLog(@"[OC底层] ✅ 发现电量特征 (0000BCA8-D102-11E1-9B23-00025B00A5A5)!");
             
             // 3. 保存特征实例
             self.batteryLevelCharacteristic = characteristic;
@@ -141,8 +183,8 @@
         return;
     }
     
-    // 1. 确认是电量特征 (2A19) 的回调
-    if ([characteristic.UUID.UUIDString isEqualToString:@"2A19"]) {
+    // 1. 确认是电量特征的回调
+    if ([characteristic.UUID.UUIDString isEqualToString:@"0000BCA8-D102-11E1-9B23-00025B00A5A5"]) {
         
         // 2. 解析电量数据
         // 电量值是一个单字节（UInt8）数据，0-100
@@ -188,27 +230,36 @@
     }
 }
 
-- (void)sendCommand:(NSString *)hexCommand toDevice:(DeviceType)type {
-    NSString *typeString = (type == DeviceTypeLight) ? @"补光灯" : @"云台";
-    NSLog(@"[OC底层] 正在向 [%@] 发送指令: %@", typeString, hexCommand);
-    
-    // --- 模拟硬件延时回复 ---
-    // 使用 GCD 模拟 2 秒后收到硬件数据
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+// 注意：方法名必须完全匹配头文件中的声明：sendCommand:withType:
+- (void)sendCommand:(NSString *)command withType:(NSInteger)type {
+    if (!self.connectedPeripheral) {
+        NSLog(@"[OC底层] 🔴 无法发送指令：未连接设备。");
+        return;
+    }
+    // ⚠️ 【修复 UUID 拼写】使用正确的自定义服务和写入特征 UUID
+        NSString *SERVICE_UUID = @"65786365-6C70-6F69-6E74-2E636F6D0001";
+        NSString *WRITE_CHAR_UUID = @"65786365-6C70-6F69-6E74-2E636F6D0002";
         
-        NSLog(@"[OC底层] ⚡️ 收到硬件响应数据！准备通知 Swift...");
-        
-        // 1. 调用 Swift 单例
-        // 注意：Swift 的 UIHelper.shared 在这里变成了 [UIHelper shared]
-        UIHelper *helper = [UIHelper shared];
-        
-        // 2. 调用 Swift 方法
-        // 注意：showHardwareMessage(_ message:) 变成了 showHardwareMessage:
-        [helper showHardwareMessage:@"亮度调节完毕 (from OC)"];
-        
-    });
-}
+        CBCharacteristic *writeChar = [self findCharacteristic:WRITE_CHAR_UUID
+                                                 withService:SERVICE_UUID];
+    // 1. 查找写入特征
 
+    
+    if (writeChar) {
+        // 2. 将 Hex 字符串（如 "01"）转换为 NSData
+        // ⚠️ 你需要实现一个辅助方法 dataFromHexString:
+        NSData *commandData = [self dataFromHexString:command];
+        
+        NSLog(@"[OC底层] 📝 正在向 %@ 写入指令: %@ (Type: %ld)", writeChar.UUID.UUIDString, command, (long)type);
+        
+        // 3. 执行写入操作 (假设使用 withResponse)
+        [self.connectedPeripheral writeValue:commandData
+                          forCharacteristic:writeChar
+                                       type:CBCharacteristicWriteWithResponse];
+    } else {
+        NSLog(@"[OC底层] 🔴 无法找到控制写入特征或服务。");
+    }
+}
 - (void)writeValue:(NSData *)data forCharacteristicUUID:(NSString *)characteristicUUIDString {
     
     if (!self.connectingPeripheral) {
@@ -327,4 +378,69 @@
         [self.delegate didDiscoverDeviceWithName:foundName rssi:RSSI];
     }
 }
+
+// ios/Runner/BLEDriver.m (在文件底部实现)
+
+// ... 其他委托方法实现 (didConnectPeripheral, didDiscoverServices, etc.)
+
+#pragma mark - 辅助方法实现 (Helper Implementations)
+
+// 查找特征
+- (nullable CBCharacteristic *)findCharacteristic:(NSString *)characteristicUUIDString
+                                       withService:(NSString *)serviceUUIDString {
+    
+    CBUUID *serviceUUID = [CBUUID UUIDWithString:serviceUUIDString];
+    CBUUID *charUUID = [CBUUID UUIDWithString:characteristicUUIDString];
+    
+    // 遍历已连接设备的所有服务
+    for (CBService *service in self.connectedPeripheral.services) {
+        if ([service.UUID isEqual:serviceUUID]) {
+            // 找到目标服务，遍历其所有特征
+            for (CBCharacteristic *characteristic in service.characteristics) {
+                if ([characteristic.UUID isEqual:charUUID]) {
+                    NSLog(@"[OC底层] 🔍 找到特征 %@ 在服务 %@", charUUID.UUIDString, serviceUUID.UUIDString);
+                    return characteristic;
+                }
+            }
+        }
+    }
+    
+    NSLog(@"[OC底层] ❌ 找不到指定的特征 %@ 在服务 %@", charUUID.UUIDString, serviceUUID.UUIDString);
+    return nil;
+}
+
+
+#pragma mark - 辅助方法实现 (Helper Implementations)
+
+// 【核心实现】将 Hex 字符串转换为 NSData
+- (NSData *)dataFromHexString:(NSString *)hexString {
+    // 移除空格和不必要的字符，并转为大写
+    NSString *cleanString = [[hexString stringByReplacingOccurrencesOfString:@" " withString:@""] uppercaseString];
+    
+    // 确保字符串长度是偶数
+    if (cleanString.length % 2 != 0) {
+        NSLog(@"[OC底层] ❌ Hex 字符串长度必须为偶数。");
+        return nil;
+    }
+    
+    NSMutableData *data = [NSMutableData data];
+    int idx;
+    // 每两个字符代表一个字节
+    for (idx = 0; idx < cleanString.length; idx += 2) {
+        NSRange range = NSMakeRange(idx, 2);
+        NSString *hexByte = [cleanString substringWithRange:range];
+        
+        NSScanner *scanner = [NSScanner scannerWithString:hexByte];
+        unsigned int byte;
+        // 扫描并转换为 16 进制整数
+        if ([scanner scanHexInt:&byte]) {
+            [data appendBytes:&byte length:1];
+        } else {
+            NSLog(@"[OC底层] ❌ Hex 字符串包含非法字符: %@", hexByte);
+            return nil;
+        }
+    }
+    return data;
+}
+
 @end

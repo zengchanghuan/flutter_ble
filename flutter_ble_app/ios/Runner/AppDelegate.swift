@@ -48,6 +48,20 @@ class AppDelegate: FlutterAppDelegate,FlutterStreamHandler {
                 // ⚠️ 调用 ViewModel 中正确签名的方法
                 self.viewModel.connect(toDeviceName: name)
                 result(nil)
+            case "readBatteryLevel":
+                        self.viewModel.readBatteryLevel() // 转发给 Swift ViewModel
+                        result(nil)
+                    
+                    case "sendCommand":
+                        guard let args = call.arguments as? [String: Any],
+                              let command = args["command"] as? String,
+                              let type = args["type"] as? Int else {
+                            result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing command or type", details: nil))
+                            return
+                        }
+                        // 转发给 Swift ViewModel
+                        self.viewModel.sendCommand(command: command, type: type)
+                        result(nil)
 
             // 【新增】处理断开连接
             case "disconnectDevice":

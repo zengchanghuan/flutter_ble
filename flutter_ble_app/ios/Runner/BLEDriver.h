@@ -50,7 +50,8 @@ typedef NS_ENUM(NSInteger,DeviceType) {
 - (instancetype)initWithDeviceName:(NSString *)name;
 
 // 发送指令的方法
-- (void)sendCommand:(NSString *)hexCommand toDevice:(DeviceType)type;
+- (void)sendCommand:(NSString *)command withType:(NSInteger)type __attribute__((swift_name("sendCommand(command:withType:)")));
+//- (void)sendCommand:(NSString *)hexCommand toDevice:(DeviceType)type;
 
 // 新增开始扫描方法
 - (void)startScan;
@@ -71,6 +72,7 @@ typedef NS_ENUM(NSInteger,DeviceType) {
 // characteristicUUIDString: 目标特征的 UUID
 // data: 要写入的数据 (NSData)
 - (void)writeValue:(NSData *)data forCharacteristicUUID:(NSString *)characteristicUUIDString;
+
 
 @end
 
