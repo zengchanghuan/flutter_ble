@@ -144,8 +144,20 @@ extension BluetoothViewModel: BLEDriverDelegate {
     }
     
     // 4. 发现服务回调 (新方法，使用最符合规范的 Swift 签名)
+    // BluetoothViewModel.swift
+
+    // BLEDriverDelegate 协议方法
     func didDiscoverServices(forDevice name: String) {
         print("✨ [ViewModel] 设备 \(name) 服务和特征已发现，可以开始读写数据了！")
+        
+        // 1. 设置 ViewModel 的状态
         self.connectionStatus = .servicesReady(name)
+        
+        // 2. 【核心】通过 Event Channel 通知 Flutter UI
+        self.eventSink?([
+            "type": "connectionStatus",
+            "deviceName": name,
+            "status": "connected_ready" // 自定义状态码
+        ])
     }
 }

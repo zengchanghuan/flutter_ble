@@ -117,9 +117,9 @@
     }
     
     // 通知 Swift 层服务发现已完成，可以进行通信了 (保持不变)
-//    if (self.delegate && [self.delegate respondsToSelector:@selector(didDiscoverServicesForDevice:)]) {
-//        [self.delegate didDiscoverServicesForDevice:peripheral.name];
-//    }
+    if (self.delegate && [self.delegate respondsToSelector:@selector(didDiscoverServicesForDevice:)]) {
+        [self.delegate didDiscoverServicesForDevice:peripheral.name];
+    }
     
     // 🚨 更好的做法：只在 `didDiscoverServices` 中进行特征发现，然后等待所有特征发现的回调完成。
         // 但是，由于你的 ViewModel 是在 `didDiscoverServicesForDevice` 收到通知后才认为连接完成，我们

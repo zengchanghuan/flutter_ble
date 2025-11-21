@@ -66,26 +66,40 @@ class _BleHomePageState extends State<BleHomePage> {
   void _startListeningForDevices() {
     // 监听 Event Channel 数据流
     bleEvents.receiveBroadcastStream().listen((dynamic event) {
-      // event 是原生发送的 Map<String, Any> 数据
+      if (event is Map) {
+        // 处理发现的设备 (保持不变)
+        // 检查数据类型并处理发现的设备
+        if (event is Map && event['type'] == 'deviceDiscovered') {
+          final newDevice = DiscoveredDevice(event['name'], event['rssi']);
 
-      // 检查数据类型并处理发现的设备
-      if (event is Map && event['type'] == 'deviceDiscovered') {
-        final newDevice = DiscoveredDevice(event['name'], event['rssi']);
+          setState(() {
+            // 使用 Set 的特性去重并更新 UI
+            _devices.add(newDevice);
+            _statusMessage = "发现设备: ${_devices.length} 个";
+          });
+        }
 
-        setState(() {
-          // 使用 Set 的特性去重并更新 UI
-          _devices.add(newDevice);
-          _statusMessage = "发现设备: ${_devices.length} 个";
-        });
+        // ⚠️ 【核心新增】处理连接状态更新
+        if (event['type'] == 'connectionStatus') {
+          final status = event['status'];
+          final deviceName = event['deviceName'];
+
+          if (status == 'connected_ready') {
+            setState(() {
+              _statusMessage = '✅ 已连接到: $deviceName';
+              // 可以在这里设置一个状态标志，触发 build 方法渲染连接成功后的界面
+              // 例如：_isConnected = true; _connectedDeviceName = deviceName;
+            });
+          }
+          // TODO: 添加处理断开连接 'disconnected' 和连接失败 'failed' 的逻辑
+        }
       }
-      // TODO: 这里可以添加处理连接状态 'connectionStatus' 的逻辑...
     }, onError: (error) {
-      // 错误处理
+      /// 错误处理
       setState(() {
         _statusMessage = "Event 错误: ${error.message}";
       });
-    });
-  }
+    });  }
 
   // MARK: - Flutter -> 原生方法调用 (Method Channel)
 
